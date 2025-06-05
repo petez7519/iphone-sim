@@ -1,0 +1,93 @@
+version: 2.1
+
+jobs:
+  build-and-test:
+    macos:
+      xcode: 16.2.0  # Latest Xcode version with iPhone simulator support
+    resource_class: m2pro.large  # M2 Pro large resource class
+    steps:
+      - checkout
+      
+      # Show available simulators
+      - run:
+          name: List available simulators
+          command: xcrun simctl list devices available
+      
+      # Create iPhone simulator if needed
+      - run:
+          name: Create iPhone simulator
+          command: |
+            xcrun simctl create "iPhone 15" "iPhone 15" "iOS 17.2" || true
+            xcrun simctl list devices | grep "iPhone 15"
+      
+      # Boot the simulator
+      - run:
+          name: Boot iPhone simulator
+          command: |
+            SIMULATOR_ID=$(xcrun simctl list devices | grep "iPhone 15" | grep -v "unavailable" | head -1 | grep -oE '\([A-F0-9-]{36}\)' | tr -d '()')
+            echo "Booting simulator: $SIMULATOR_ID"
+            xcrun simctl boot "$SIMULATOR_ID"
+            xcrun simctl list devices | grep "iPhone 15"
+      
+      # Wait for simulator to be ready
+      - run:
+          name: Wait for simulator to boot
+          command: |
+            SIMULATOR_ID=$(xcrun simctl list devices | grep "iPhone 15" | grep "Booted" | head -1 | grep -oE '\([A-F0-9-]{36}\)' | tr -d '()')
+            if [ ! -z "$SIMULATOR_ID" ]; then
+              echo "Waiting for simulator to be ready..."
+              timeout 60 bash -c 'until xcrun simctl bootstatus $1 | grep -m1 "Boot Status: 2"; do sleep 1; done' -- "$SIMULATOR_ID"
+              echo "Simulator is ready!"
+            fi
+      
+      # Build your iOS project (example for Swift/Xcode project)
+      - run:
+          name: Build iOS project
+          command: |
+            # Replace 'YourApp' with your actual scheme name
+            xcodebuild -workspace YourApp.xcworkspace \
+                      -scheme YourApp \
+                      -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
+                      build-for-testing
+      
+      # Run tests on iPhone simulator
+      - run:
+          name: Run tests on iPhone simulator
+          command: |
+            # Replace 'YourApp' with your actual scheme name
+            xcodebuild -workspace YourApp.xcworkspace \
+                      -scheme YourApp \
+                      -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
+                      test-without-building
+      
+      # Optional: Take screenshot of simulator
+      - run:
+          name: Take simulator screenshot
+          command: |
+            SIMULATOR_ID=$(xcrun simctl list devices | grep "iPhone 15" | grep "Booted" | head -1 | grep -oE '\([A-F0-9-]{36}\)' | tr -d '()')
+            if [ ! -z "$SIMULATOR_ID" ]; then
+              xcrun simctl io "$SIMULATOR_ID" screenshot ~/simulator_screenshot.png
+            fi
+      
+      # Store test results and artifacts
+      - store_test_results:
+          path: test_output/
+      
+      - store_artifacts:
+          path: ~/simulator_screenshot.png
+          destination: simulator_screenshot.png
+      
+      # Clean up - shutdown simulator
+      - run:
+          name: Shutdown simulator
+          command: |
+            SIMULATOR_ID=$(xcrun simctl list devices | grep "iPhone 15" | grep "Booted" | head -1 | grep -oE '\([A-F0-9-]{36}\)' | tr -d '()')
+            if [ ! -z "$SIMULATOR_ID" ]; then
+              xcrun simctl shutdown "$SIMULATOR_ID"
+            fi
+          when: always
+
+workflows:
+  build-and-test-workflow:
+    jobs:
+      - build-and-test
