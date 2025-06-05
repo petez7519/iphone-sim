@@ -30,7 +30,7 @@ jobs:
             xcrun simctl list devices | grep "iPhone 15"
       
       # Wait for simulator to be ready
-     - run:
+      - run:
           name: Wait for simulator to boot
           command: |
             SIMULATOR_ID=$(xcrun simctl list devices | grep "iPhone 15" | grep "Booted" | head -1 | grep -oE '\([A-F0-9-]{36}\)' | tr -d '()')
