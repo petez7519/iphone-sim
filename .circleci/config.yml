@@ -30,14 +30,28 @@ jobs:
             xcrun simctl list devices | grep "iPhone 15"
       
       # Wait for simulator to be ready
-      - run:
+     - run:
           name: Wait for simulator to boot
           command: |
             SIMULATOR_ID=$(xcrun simctl list devices | grep "iPhone 15" | grep "Booted" | head -1 | grep -oE '\([A-F0-9-]{36}\)' | tr -d '()')
             if [ ! -z "$SIMULATOR_ID" ]; then
               echo "Waiting for simulator to be ready..."
-              timeout 60 bash -c 'until xcrun simctl bootstatus $1 | grep -m1 "Boot Status: 2"; do sleep 1; done' -- "$SIMULATOR_ID"
-              echo "Simulator is ready!"
+              COUNTER=0
+              MAX_ATTEMPTS=60
+              while [ $COUNTER -lt $MAX_ATTEMPTS ]; do
+                if xcrun simctl bootstatus "$SIMULATOR_ID" | grep -q "Boot Status: 2"; then
+                  echo "Simulator is ready!"
+                  break
+                fi
+                echo "Waiting... ($COUNTER/$MAX_ATTEMPTS)"
+                sleep 1
+                COUNTER=$((COUNTER + 1))
+              done
+              
+              if [ $COUNTER -eq $MAX_ATTEMPTS ]; then
+                echo "Timeout waiting for simulator to boot"
+                exit 1
+              fi
             fi
       
       # Build your iOS project (example for Swift/Xcode project)
